@@ -23,7 +23,7 @@
 1. clone this repo:
 
    ```
-   git clone https://github.com/wufan-tb/yolo_slowfast
+   git clone https://github.com/wangkang12/yolo_slowfast-master
    cd yolo_slowfast
    ```
 
@@ -53,7 +53,9 @@
    ```
 
    The first time execute this command may take some times to download the yolov5 code and it's weights file from torch.hub, keep your network connection.
-
+6. test on your webcam
+   run demo_inference_camerweb.py
+   the demo can support the display on the Flask web.but the realtime is poor,next I will optimize the demo .
 ## References
 
 Thanks for these great works:
