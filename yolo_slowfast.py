@@ -110,6 +110,7 @@ def main(config):
         imgs=[]
         for j in range(img_num):
             imgs.append(tensor_to_numpy(video_clips[:,j,:,:]))
+        print(imgs)
         yolo_preds=model(imgs, size=imsize)
         yolo_preds.files=[f"img_{i*25+k}.jpg" for k in range(img_num)]
 

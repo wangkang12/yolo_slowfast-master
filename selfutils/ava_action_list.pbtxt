@@ -19,7 +19,7 @@ item {
   id: 5
 }
 item {
-  name: "get up"
+  name: "getup/squat"
   id: 6
 }
 item {
@@ -147,7 +147,7 @@ item {
   id: 37
 }
 item {
-  name: "open (e.g., a window, a car door)"
+  name: "walk (e.g., a window, a car door)"
   id: 38
 }
 item {

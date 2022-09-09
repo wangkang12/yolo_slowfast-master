@@ -19,7 +19,7 @@ item {
   id: 5
 }
 item {
-  name: "get up"
+  name: "getup"
   id: 6
 }
 item {
@@ -239,7 +239,7 @@ item {
   id: 60
 }
 item {
-  name: "stand"
+  name: "watch"
   id: 61
 }
 item {
@@ -315,6 +315,6 @@ item {
   id: 79
 }
 item {
-  name: "stand"
+  name: "watch (a person)"
   id: 80
 }
