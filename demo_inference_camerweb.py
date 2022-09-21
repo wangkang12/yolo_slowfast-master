@@ -18,7 +18,7 @@ q=deque(maxlen=maxsize)
 p_result=queue.Queue(maxsize=2)
 lock=threading.Lock()
 
-cond = threading.Condition()
+saveimg=True
 def tensor_to_numpy(tensor):
     img = tensor.cpu().numpy().transpose((1, 2, 0))
     return img
@@ -69,15 +69,19 @@ def deepsort_update(Tracker, pred, xywh, np_img):
     return outputs
 
 
-def save_yolopreds_tovideo(yolo_preds, id_to_ava_labels, color_map):
+def save_yolopreds_tovideo(yolo_preds, id_to_ava_labels, color_map,saveimg=False):
     img_num = len(yolo_preds.ims)
+    save_img_actionlabel = ["bend/bow", "getup/squat", "carry/hold", "climb","smoke"]
+    save_img_label=['backpack','handbag','suitcase']
     for i, (im, pred) in enumerate(zip(yolo_preds.ims, yolo_preds.pred)):
-        # im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
-        if ((i>=int((img_num-3))) and (pred.shape[0])):
+        yolo_label=''
+        if ((i>=int((img_num-5))) and (pred.shape[0])):
             for j, (*box, cls, trackid, vx, vy) in enumerate(pred):
                 if int(cls) != 0:
-                    # ava_label = ''
-                    continue
+                    yolo_label = yolo_preds.names[int(cls)]
+                    ava_label=''
+                    trackid=''
+                    # continue
                 elif trackid in id_to_ava_labels.keys():
                     ava_label = id_to_ava_labels[trackid].split(' ')[0]
                 else:
@@ -85,10 +89,15 @@ def save_yolopreds_tovideo(yolo_preds, id_to_ava_labels, color_map):
                 # if (int(cls) != 0):#just only detecting the person
                 #     continue
                 print("avalabel:***{}***".format(ava_label))
-                text = '{} {} {}'.format(int(trackid), yolo_preds.names[int(cls)], ava_label)
+                # text = '{} {} {}'.format(str(trackid), yolo_preds.names[int(cls)], ava_label)
+                text = '{} {}'.format(str(trackid), ava_label)
                 color = color_map[int(cls)]
                 im = plot_one_box(box, im, color, text)
-
+                if saveimg:
+                    if (ava_label in save_img_actionlabel)or(yolo_label in save_img_label):
+                        imgname = time.ctime()
+                        imgname = imgname.replace(' ', '_').replace(':', '_')
+                        cv2.imwrite(todaya_time_folder + '//'+str(imgname) + '.jpg', im)
             p_result.put(im)
             time.sleep(0.05)
             p_result.get() if p_result.qsize() > 1 else time.sleep(0.000001)
@@ -98,12 +107,10 @@ def save_yolopreds_tovideo(yolo_preds, id_to_ava_labels, color_map):
 
 def show_yolopreds(yolo_preds):
     img_num = len(yolo_preds.ims)
+    save_img_label=['person','backpack','handbag','suitcase']
     for i, (im, pred) in enumerate(zip(yolo_preds.ims, yolo_preds.pred)):
-        # im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
-        # print("pred:",pred,pred.shape)
+
         if pred.shape[0]:
-            # yolo_preds.print()  # or .show(), .save(), .crop(), .pandas(), etc.
-            # print('----------------',yolo_preds.xyxy[0])  # img1 predictions (tensor)
             imageIndex=yolo_preds.pandas().xyxy[i]  # img1 predictions (pandas)
             if imageIndex.shape[0]:
                 for box_num in range(int(imageIndex.shape[0])):
@@ -115,7 +122,7 @@ def show_yolopreds(yolo_preds):
                     im=cv2.putText(im, imageIndex["name"][box_num],(startX, y + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 0, 255), 2)
                     im=cv2.rectangle(im,(startX, startY), (endX, endY), (0, 255, 0), 2)
 
-        if i < int((img_num - 3)):
+        if i < int((img_num - 5)):
             p_result.put(im)
             # time.sleep(0.01)
             p_result.get() if p_result.qsize() > 1 else time.sleep(0.000001)
@@ -181,54 +188,20 @@ def yolo_slowfast_action(model,deepsort_tracker,framelist):
             print("cost:_____",cost)
         for tid, avalabel in zip(yolo_preds.pred[img_num // 2][:, 5].tolist(),np.argmax(slowfaster_preds, axis=1).tolist()):
             id_to_ava_labels[tid] = ava_labelnames[avalabel + 1]
-    save_yolopreds_tovideo(yolo_preds, id_to_ava_labels, coco_color_map)
-
-def action_recognization(yolo_preds,deepsort_tracker,framelist):
-
-    img_num = int(maxsize)
-    yolo_preds.files = [f"img_{k}.jpg" for k in range(img_num)]
-    # print("yolo_preds:",yolo_preds)
-    deepsort_outputs = []
-    for j in range(len(yolo_preds.pred)):
-
-        temp = deepsort_update(deepsort_tracker, yolo_preds.pred[j].cpu(), yolo_preds.xywh[j][:, 0:4].cpu(),
-                               yolo_preds.ims[j])
-        if len(temp) == 0:
-            temp = np.ones((0, 8))
-        deepsort_outputs.append(temp.astype(np.float32))
-    yolo_preds.pred = deepsort_outputs
-    coco_color_map = [[random.randint(0, 255) for _ in range(3)] for _ in range(80)]
-    id_to_ava_labels = {}
-    video_clips = torch.from_numpy(np.array(framelist))
-    # video_clips.transpose(3,2).transpose(2,1).transpose(1,0)
-    video_clips = video_clips.permute((3, 0, 1, 2))
-    if yolo_preds.pred[img_num // 2].shape[0]:
-        inputs, inp_boxes, _ = ava_inference_transform(video_clips, yolo_preds.pred[img_num // 2][:, 0:4],
-                                                       crop_size=640)
-        inp_boxes = torch.cat([torch.zeros(inp_boxes.shape[0], 1), inp_boxes], dim=1)
-        if isinstance(inputs, list):
-            inputs = [inp.unsqueeze(0).to(device) for inp in inputs]
-        else:
-            inputs = inputs.unsqueeze(0).to(device)
-        with torch.no_grad():
-            time1 = time.time()
-            slowfaster_preds = slowfast_model(inputs, inp_boxes.to(device))
-            slowfaster_preds = slowfaster_preds.cpu()
-            time2 = time.time()
-            cost = time2 - time1
-            print("cost:_____", cost)
-        for tid, avalabel in zip(yolo_preds.pred[img_num // 2][:, 5].tolist(),
-                                 np.argmax(slowfaster_preds, axis=1).tolist()):
-            id_to_ava_labels[tid] = ava_labelnames[avalabel + 1]
-
-    save_yolopreds_tovideo(yolo_preds, id_to_ava_labels, coco_color_map)
-
+    save_yolopreds_tovideo(yolo_preds, id_to_ava_labels, coco_color_map,saveimg)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 yolo5l6=r'C:\Users\Administrator\.cache\torch\hub\ultralytics_yolov5_master'
 webcam_ip='rtsp://freja.hiof.no:1935/rtplive/_definst_/hessdalen03.stream'
 # input = "demo/B6-8-23-10-46-t.mp4"
 yolo_model,slowfast_model,deepsort_tracker,ava_labelnames=load_model(yolo5l6)
+if not os.path.exists('./demo/result'):
+    os.mkdir('./demo/result')
+ctime=time.ctime()
+today_time=ctime.replace(' ','_').replace(':','_')
+todaya_time_folder='./demo/result/'+today_time
+if not os.path.exists(todaya_time_folder):
+    os.mkdir(todaya_time_folder)
 frame_list=[]
 cap=cv2.VideoCapture(0)
 global yolo_preds
@@ -255,20 +228,19 @@ def receive():
 def yolo_process():
     time.sleep(2)
     while True:
-        # if len(frame_list) == (maxsize):
-        #     yolo_slowfast_action(yolo_model,deepsort_tracker,frame_list)
+
         yolo_slowfast_action(yolo_model, deepsort_tracker, frame_list)
-def action_process():
-    global yolo_preds
-    time.sleep(3)
-    while True:
-        action_recognization(yolo_preds, deepsort_tracker, frame_list)
+# def action_process():
+#     global yolo_preds
+#     time.sleep(3)
+#     while True:
+#         action_recognization(yolo_preds, deepsort_tracker, frame_list)
 
 def show_result():
 
     while True:
         if (p_result.full() != True):
-            print("show_result.................")
+            # print("show_result.................")
             result_frame = p_result.get()
             ret, buffer = cv2.imencode('.jpg', result_frame)
             frame = buffer.tobytes()
