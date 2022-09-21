@@ -71,7 +71,7 @@ def deepsort_update(Tracker, pred, xywh, np_img):
 
 def save_yolopreds_tovideo(yolo_preds, id_to_ava_labels, color_map,saveimg=False):
     img_num = len(yolo_preds.ims)
-    save_img_actionlabel = ["bend/bow", "getup/squat", "carry/hold", "climb","smoke"]
+    save_img_actionlabel = ["bend/bow","crawl", "crouch/kneel", "getup/squat", "carry/hold", "climb","smoke",'fight/hit']
     save_img_label=['backpack','handbag','suitcase']
     for i, (im, pred) in enumerate(zip(yolo_preds.ims, yolo_preds.pred)):
         yolo_label=''
