@@ -53,17 +53,38 @@ def ava_inference_transform(clip, boxes,
 
 
 def plot_one_box(x, img, color=[100, 100, 100], text_info="None",
-                 velocity=None, thickness=1, fontsize=0.5, fontthickness=1):
+                 velocity=None, thickness=2, fontsize=0.7, fontthickness=2):
     # Plots one bounding box on image img
     c1, c2 = (int(x[0]), int(x[1])), (int(x[2]), int(x[3]))
-    cv2.rectangle(img, c1, c2, color, thickness, lineType=cv2.LINE_AA)
+    cv2.rectangle(img, c1, c2, color, int(thickness), lineType=cv2.LINE_AA)
     t_size = cv2.getTextSize(text_info, cv2.FONT_HERSHEY_TRIPLEX, fontsize, fontthickness + 2)[0]
-    cv2.rectangle(img, c1, (c1[0] + int(t_size[0]), c1[1] + int(t_size[1] * 1.45)), color, -1)
+    cv2.rectangle(img, c1, (c1[0] + int(t_size[0]), c1[1] + int(t_size[1] * 1.45)), color, 2)
     cv2.putText(img, text_info, (c1[0], c1[1] + t_size[1] + 2),
-                cv2.FONT_HERSHEY_TRIPLEX, fontsize, [255, 255, 255], fontthickness)
+                cv2.FONT_HERSHEY_TRIPLEX, fontsize, [128, 0, 128], fontthickness)
     return img
 
-
+def IOU(box1,box2):
+    (x1,y1),(x2,y2)=box1
+    (x3,y3),(x4,y4)=box2
+    x_inter1=max(x1,x3)
+    y_inter1=max(y1,y3)
+    x_inter2=min(x2,x4)
+    y_inter2=min(y2,y4)
+    if (x_inter2>x_inter1) and (y_inter2>y_inter1):
+        width_inter = abs(x_inter2 - x_inter1)
+        height_inter = abs(y_inter2 - y_inter1)
+        area_inter = width_inter * height_inter
+        width_box1 = abs(x2 - x1)
+        height_box1 = abs(y2 - y1)
+        width_box2 = abs(x4 - x3)
+        height_box2 = abs(y4 - y3)
+        area_box1 = width_box1 * height_box1
+        area_box2 = width_box2 * height_box2
+        area_union = area_box1 + area_box2 - area_inter
+        iou = area_inter / area_union
+    else:
+        iou=0
+    return iou
 def deepsort_update(Tracker, pred, xywh, np_img):
     outputs = Tracker.update(xywh, pred[:, 4:5], pred[:, 5].tolist(), cv2.cvtColor(np_img, cv2.COLOR_BGR2RGB))
     return outputs
@@ -71,33 +92,42 @@ def deepsort_update(Tracker, pred, xywh, np_img):
 
 def save_yolopreds_tovideo(yolo_preds, id_to_ava_labels, color_map,saveimg=False):
     img_num = len(yolo_preds.ims)
-    save_img_actionlabel = ["bend/bow","crawl", "crouch/kneel", "getup/squat", "carry/hold", "climb","smoke",'fight/hit']
+    img_label=yolo_preds.names
+    save_img_actionlabel = ["bend/bow","crawl", "crouch/kneel", "getup/squat", "carry/hold", "climb","smoke",'fight/hit','touch']
     save_img_label=['backpack','handbag','suitcase']
     for i, (im, pred) in enumerate(zip(yolo_preds.ims, yolo_preds.pred)):
-        yolo_label=''
-        if ((i>=int((img_num-5))) and (pred.shape[0])):
+        if ((i>=int((img_num-8))) and (pred.shape[0])):
+            yolo_imglabel=[]
+            slow_fast_label=[]
             for j, (*box, cls, trackid, vx, vy) in enumerate(pred):
                 if int(cls) != 0:
-                    yolo_label = yolo_preds.names[int(cls)]
-                    ava_label=''
-                    trackid=''
+                    yolo_label = img_label[int(cls)]
+                    ava_label=' '
+                    yolo_imglabel.append(yolo_label)
                     # continue
                 elif trackid in id_to_ava_labels.keys():
+                    yolo_label = 'person'
                     ava_label = id_to_ava_labels[trackid].split(' ')[0]
+                    slow_fast_label.append(ava_label)
                 else:
+                    yolo_label = 'Unknow'
                     ava_label = 'Unknow'
                 # if (int(cls) != 0):#just only detecting the person
                 #     continue
                 print("avalabel:***{}***".format(ava_label))
-                # text = '{} {} {}'.format(str(trackid), yolo_preds.names[int(cls)], ava_label)
-                text = '{} {}'.format(str(trackid), ava_label)
+                text = '{} {}'.format(yolo_label,ava_label)
                 color = color_map[int(cls)]
                 im = plot_one_box(box, im, color, text)
-                if saveimg:
-                    if (ava_label in save_img_actionlabel)or(yolo_label in save_img_label):
-                        imgname = time.ctime()
-                        imgname = imgname.replace(' ', '_').replace(':', '_')
-                        cv2.imwrite(todaya_time_folder + '//'+str(imgname) + '.jpg', im)
+            if saveimg:
+                for yolo_label in yolo_imglabel:
+                    for ava_label in slow_fast_label:
+                        if (ava_label in save_img_actionlabel)and(yolo_label in save_img_label):
+                            imgname = time.ctime()
+                            randint=np.random.randint(100)
+                            imgname = imgname.replace(' ', '_').replace(':', '_')
+                            cv2.imwrite(todaya_time_folder + '//'+str(imgname)+'_'+str(randint) + '.jpg', im)
+                            break
+                    break
             p_result.put(im)
             time.sleep(0.05)
             p_result.get() if p_result.qsize() > 1 else time.sleep(0.000001)
@@ -105,13 +135,17 @@ def save_yolopreds_tovideo(yolo_preds, id_to_ava_labels, color_map,saveimg=False
         # print('save_size:',p_result.qsize())
 
 
-def show_yolopreds(yolo_preds):
+def show_yolopreds(yolo_preds,saveimg=False):
     img_num = len(yolo_preds.ims)
-    save_img_label=['person','backpack','handbag','suitcase']
+    save_img_label=['backpack','handbag','suitcase']
     for i, (im, pred) in enumerate(zip(yolo_preds.ims, yolo_preds.pred)):
-
+        if i >= int((img_num - 8)):
+            continue
+        imageIndex = yolo_preds.pandas().xyxy[i]
+        person_label=[]
+        img_label=[]
         if pred.shape[0]:
-            imageIndex=yolo_preds.pandas().xyxy[i]  # img1 predictions (pandas)
+             # img1 predictions (pandas)
             if imageIndex.shape[0]:
                 for box_num in range(int(imageIndex.shape[0])):
                     startX = int(imageIndex["xmin"][box_num])
@@ -119,10 +153,39 @@ def show_yolopreds(yolo_preds):
                     endX = int(imageIndex["xmax"][box_num])
                     endY = int(imageIndex["ymax"][box_num])
                     y = startY - 10 if startY - 10 > 10 else startY + 10
-                    im=cv2.putText(im, imageIndex["name"][box_num],(startX, y + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 0, 255), 2)
+                    if imageIndex["name"][box_num]=='person':
+                        person_label.append([(startX, startY), (endX, endY)])
+                    if imageIndex["name"][box_num] in save_img_label:
+                        img_label.append([(startX, startY), (endX, endY)])
+                    im=cv2.putText(im, imageIndex["name"][box_num]+str(startX)+'_'+str(startY)+'_'+str(endX)+'_'+str(endY),(startX, y + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 0, 255), 2)
                     im=cv2.rectangle(im,(startX, startY), (endX, endY), (0, 255, 0), 2)
+        if saveimg:
+            # label_person=imageIndex["name"].tolist()
+            # print(label_person)
+            if 'person' in imageIndex["name"].tolist():
+                for label in imageIndex["name"].tolist():
+                    if label=='person':
+                        continue
+                    elif label in save_img_label:
+                        for package_box in img_label:#IOU
+                            for person_box in person_label:
+                                print('person_label,img_label',person_label,img_label)
+                                iou=IOU(package_box[:],person_box[:])
+                                print('iou____________________________:',iou)
+                                if iou>=0.01:
+                                    print("save imgs:bad behave............")
+                                    imgname = time.ctime()
+                                    imgname = imgname.replace(' ', '_').replace(':', '_')
+                                    img_int=np.random.randint(1000)
+                                    # cv2.imwrite(todaya_time_folder + '//' + str(imgname) + '.jpg', im)
+                                    cv2.imwrite(todaya_time_folder + '//' +str(imgname)+ str('_yolo_')+str(img_int) + '.jpg', im)
+                    else:
+                        continue
+            else:
+                print('NO Person!')
 
-        if i < int((img_num - 5)):
+
+        if i < int((img_num - 8)):
             p_result.put(im)
             # time.sleep(0.01)
             p_result.get() if p_result.qsize() > 1 else time.sleep(0.000001)
@@ -152,7 +215,7 @@ def yolo_slowfast_action(model,deepsort_tracker,framelist):
     model.conf=0.4
     imsize=640
     yolo_preds = model(framelist,size=imsize)
-    show_yolopreds(yolo_preds)
+    show_yolopreds(yolo_preds,saveimg)
     coco_color_map = [[random.randint(0, 255) for _ in range(3)] for _ in range(80)]
 
     img_num = int(maxsize)
@@ -193,7 +256,7 @@ def yolo_slowfast_action(model,deepsort_tracker,framelist):
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 yolo5l6=r'C:\Users\Administrator\.cache\torch\hub\ultralytics_yolov5_master'
 webcam_ip='rtsp://freja.hiof.no:1935/rtplive/_definst_/hessdalen03.stream'
-# input = "demo/B6-8-23-10-46-t.mp4"
+input = "demo/B6-8-23-10-46-t.mp4"
 yolo_model,slowfast_model,deepsort_tracker,ava_labelnames=load_model(yolo5l6)
 if not os.path.exists('./demo/result'):
     os.mkdir('./demo/result')
@@ -204,6 +267,8 @@ if not os.path.exists(todaya_time_folder):
     os.mkdir(todaya_time_folder)
 frame_list=[]
 cap=cv2.VideoCapture(0)
+
+batchsize=12
 global yolo_preds
 success, frames = cap.read()
 def receive():
@@ -224,20 +289,14 @@ def receive():
         if frames_num>=24:
             frames_num=0
         frames_num+=1
-    cv2.VideoCapture(0).release()
+    cap.release()
 def yolo_process():
     time.sleep(2)
     while True:
-
         yolo_slowfast_action(yolo_model, deepsort_tracker, frame_list)
-# def action_process():
-#     global yolo_preds
-#     time.sleep(3)
-#     while True:
-#         action_recognization(yolo_preds, deepsort_tracker, frame_list)
+
 
 def show_result():
-
     while True:
         if (p_result.full() != True):
             # print("show_result.................")
@@ -249,9 +308,7 @@ def show_result():
         else:
             print("display_invalid:",p_result.empty())
 
-
 app = Flask(__name__)
-cond=threading.Condition()
 
 @app.route('/video_feed')
 def video_feed():
@@ -266,10 +323,8 @@ if __name__ == "__main__":
     q1=threading.Thread(name='receive',target=receive)
     q2=threading.Thread(name='yolo_dectection',target=yolo_process)
     # q3=threading.Thread(name='action_recognization',target=action_process)
-    q4=threading.Thread(name='show_result',target=app.run)
+    q3=threading.Thread(name='show_result',target=app.run)
     q1.start()
     q2.start()
+    q3.start()
 
-    q4.start()
-
-    # app.run(debug=False)
