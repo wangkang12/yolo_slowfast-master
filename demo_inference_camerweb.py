@@ -97,18 +97,24 @@ def save_yolopreds_tovideo(yolo_preds, id_to_ava_labels, color_map,saveimg=False
     save_img_label=['backpack','handbag','suitcase']
     for i, (im, pred) in enumerate(zip(yolo_preds.ims, yolo_preds.pred)):
         if ((i>=int((img_num-8))) and (pred.shape[0])):
-            yolo_imglabel=[]
-            slow_fast_label=[]
+            # yolo_imglabel=[]
+            # slow_fast_label=[]
+            person_box=[]
+            packages_box=[]
             for j, (*box, cls, trackid, vx, vy) in enumerate(pred):
                 if int(cls) != 0:
                     yolo_label = img_label[int(cls)]
                     ava_label=' '
-                    yolo_imglabel.append(yolo_label)
+                    if yolo_label in save_img_label:
+                        # yolo_imglabel.append(yolo_label)
+                        packages_box.append(box)
                     # continue
                 elif trackid in id_to_ava_labels.keys():
                     yolo_label = 'person'
                     ava_label = id_to_ava_labels[trackid].split(' ')[0]
-                    slow_fast_label.append(ava_label)
+                    if ava_label in save_img_actionlabel:
+                        # slow_fast_label.append(ava_label)
+                        person_box.append(box)
                 else:
                     yolo_label = 'Unknow'
                     ava_label = 'Unknow'
@@ -118,21 +124,22 @@ def save_yolopreds_tovideo(yolo_preds, id_to_ava_labels, color_map,saveimg=False
                 text = '{} {}'.format(yolo_label,ava_label)
                 color = color_map[int(cls)]
                 im = plot_one_box(box, im, color, text)
-            if saveimg:
-                for yolo_label in yolo_imglabel:
-                    for ava_label in slow_fast_label:
-                        if (ava_label in save_img_actionlabel)and(yolo_label in save_img_label):
+            if saveimg and (len(person_box)>0)and(len(packages_box)>0):
+                for person_b in person_box:
+                    for package_b in packages_box:
+                        box1 = (tuple(person_b[:2]), tuple(person_b[2:]))
+                        box2 = (tuple(package_b[:2]), tuple(package_b[2:]))
+                        iou = IOU(box1, box2)
+                        if iou>0.001:
                             imgname = time.ctime()
-                            randint=np.random.randint(100)
+                            randint = np.random.randint(100)
                             imgname = imgname.replace(' ', '_').replace(':', '_')
-                            cv2.imwrite(todaya_time_folder + '//'+str(imgname)+'_'+str(randint) + '.jpg', im)
-                            break
-                    break
+                            cv2.imwrite(todaya_time_folder + '//' + str(imgname) + '_' + str(randint) + '.jpg', im)
             p_result.put(im)
-            time.sleep(0.05)
+            time.sleep(0.01)
             p_result.get() if p_result.qsize() > 1 else time.sleep(0.000001)
 
-        # print('save_size:',p_result.qsize())
+
 
 
 def show_yolopreds(yolo_preds,saveimg=False):
@@ -157,7 +164,7 @@ def show_yolopreds(yolo_preds,saveimg=False):
                         person_label.append([(startX, startY), (endX, endY)])
                     if imageIndex["name"][box_num] in save_img_label:
                         img_label.append([(startX, startY), (endX, endY)])
-                    im=cv2.putText(im, imageIndex["name"][box_num]+str(startX)+'_'+str(startY)+'_'+str(endX)+'_'+str(endY),(startX, y + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 0, 255), 2)
+                    im=cv2.putText(im, imageIndex["name"][box_num],(startX, y + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 0, 255), 2)
                     im=cv2.rectangle(im,(startX, startY), (endX, endY), (0, 255, 0), 2)
         if saveimg:
             # label_person=imageIndex["name"].tolist()
@@ -169,7 +176,7 @@ def show_yolopreds(yolo_preds,saveimg=False):
                     elif label in save_img_label:
                         for package_box in img_label:#IOU
                             for person_box in person_label:
-                                print('person_label,img_label',person_label,img_label)
+                                # print('person_label,img_label',person_label,img_label)
                                 iou=IOU(package_box[:],person_box[:])
                                 print('iou____________________________:',iou)
                                 if iou>=0.01:
@@ -204,15 +211,10 @@ def load_model(yolo_modeldir,conf=0.4,iou=0.4):
     deepsort_tracker = DeepSort("deep_sort/deep_sort/deep/checkpoint/ckpt.t7")
     ava_labelnames, _ = AvaLabeledVideoFramePaths.read_label_map("selfutils/ava_action_list.pbtxt")
     return model,video_model,deepsort_tracker,ava_labelnames
-def yolo_dectection(model,framelist):
-    global yolo_preds
-    model.conf=0.4
-    yolo_preds = model(framelist,size=640)
-    show_yolopreds(yolo_preds)
 
 def yolo_slowfast_action(model,deepsort_tracker,framelist):
 
-    model.conf=0.4
+    model.conf=0.65
     imsize=640
     yolo_preds = model(framelist,size=imsize)
     show_yolopreds(yolo_preds,saveimg)
