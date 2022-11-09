@@ -257,7 +257,7 @@ def yolo_slowfast_action(model,deepsort_tracker,framelist):
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 yolo5l6=r'C:\Users\Administrator\.cache\torch\hub\ultralytics_yolov5_master'
-webcam_ip='rtsp://freja.hiof.no:1935/rtplive/_definst_/hessdalen03.stream'
+webcam_ip=''
 input = "demo/B6-8-23-10-46-t.mp4"
 yolo_model,slowfast_model,deepsort_tracker,ava_labelnames=load_model(yolo5l6)
 if not os.path.exists('./demo/result'):
